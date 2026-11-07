@@ -51,7 +51,10 @@ internal object LiveTvViewState {
         LiveTvPreferences.playlists,
         ParentalControls.unlocked,
     ) { channels, user, s, playlists, unlocked ->
-        build(channels, user, s, playlists.any { it.liveEnabled }, unlocked)
+        // The native Magis source counts as a source even with no playlist: a build that
+        // carries MAGIS_* must render the grid, not the "No playlists yet" empty state.
+        val hasNativeSource = com.nuvio.app.features.livetv.native.magis.MagisBootstrap.stack() != null
+        build(channels, user, s, playlists.any { it.liveEnabled } || hasNativeSource, unlocked)
     }.stateIn(scope, SharingStarted.Eagerly, LiveTvListState())
 
     fun build(channels: List<LiveChannel>, user: LiveUserState, s: LiveTvSettings, hasSources: Boolean, unlocked: Set<String> = emptySet()): LiveTvListState {

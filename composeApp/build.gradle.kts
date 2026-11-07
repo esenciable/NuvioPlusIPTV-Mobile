@@ -100,6 +100,32 @@ abstract class GenerateRuntimeConfigsTask : DefaultTask() {
             )
         }
 
+        // Magis portal configuration (see local.properties). Empty values mean "this build does
+        // not carry the native source": MagisBootstrap then builds nothing and the Live TV tab
+        // behaves exactly like a build without it.
+        outDir.resolve("com/nuvio/app/features/livetv/native/magis").apply {
+            mkdirs()
+            resolve("MagisConfig.kt").writeText(
+                """
+                |package com.nuvio.app.features.livetv.native.magis
+                |
+                |/** Build-time Magis portal configuration. Values come from local.properties only. */
+                |object MagisConfig {
+                |    const val HOSTS = "${props.getProperty("MAGIS_HOSTS", "")}"
+                |    const val APP_ID = "${props.getProperty("MAGIS_APP_ID", "")}"
+                |    const val APK_VERSION = "${props.getProperty("MAGIS_APK_VERSION", "")}"
+                |    const val APK_VER_HEADER = "${props.getProperty("MAGIS_APK_VER_HEADER", "")}"
+                |    const val SPKG_VER = "${props.getProperty("MAGIS_SPKG_VER", "")}"
+                |    const val THREE_DES_KEY = "${props.getProperty("MAGIS_3DES_KEY", "")}"
+                |
+                |    /** A build without hosts, appId or the 3DES key carries no usable source. */
+                |    val enabled: Boolean
+                |        get() = HOSTS.isNotBlank() && APP_ID.isNotBlank() && THREE_DES_KEY.isNotBlank()
+                |}
+                """.trimMargin()
+            )
+        }
+
         outDir.resolve("com/nuvio/app/features/trakt").apply {
             mkdirs()
             resolve("TraktConfig.kt").writeText(

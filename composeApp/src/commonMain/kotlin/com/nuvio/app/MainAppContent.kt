@@ -907,8 +907,11 @@ internal fun MainAppContent(
         }
 
         fun openLiveChannel(channel: LiveChannel, nowTitle: String?) {
-            val launchId = LiveTvPlayback.prepare(channel, activePlaybackProfileId, nowTitle)
-            navController.navigate(PlayerRoute(launchId = launchId, title = channel.name))
+            // prepare() suspends because a Magis channel mints its URL and signed headers first.
+            coroutineScope.launch {
+                val launchId = LiveTvPlayback.prepare(channel, activePlaybackProfileId, nowTitle)
+                navController.navigate(PlayerRoute(launchId = launchId, title = channel.name))
+            }
         }
 
         fun openOnDemandLaunch(playerLaunch: PlayerLaunch) {

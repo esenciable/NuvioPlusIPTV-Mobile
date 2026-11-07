@@ -11,10 +11,16 @@ package com.nuvio.app.features.livetv.native.magis
  */
 internal class MagisStores {
 
-    private var loadSession: () -> String? = { null }
-    private var saveSession: (String) -> Unit = {}
-    private var loadConfig: () -> String? = { null }
-    private var saveConfig: (String) -> Unit = {}
+    // Until the platform installs real storage these hold the values in memory. They must NOT be
+    // no-ops: the session mints a device and the very next call has to carry its `sn`, or the
+    // portal answers returnCode=1 and no channel ever loads.
+    private var sessionInMemory: String? = null
+    private var configInMemory: String? = null
+
+    private var loadSession: () -> String? = { sessionInMemory }
+    private var saveSession: (String) -> Unit = { sessionInMemory = it }
+    private var loadConfig: () -> String? = { configInMemory }
+    private var saveConfig: (String) -> Unit = { configInMemory = it }
 
     fun installPersistence(
         loadSession: () -> String?,

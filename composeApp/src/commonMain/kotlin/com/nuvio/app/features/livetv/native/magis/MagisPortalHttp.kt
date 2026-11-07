@@ -64,6 +64,7 @@ internal class MagisPortalHttp(
         }
         val wire = crypto.encryptBody(MagisJsonObject(body).toString())
 
+        magisLog("portal: POST $path hosts=${config.hosts.size} crypto=${crypto != null}")
         waitTurn()
         var lastError: Throwable? = null
         for (host in hostOrder(config)) {
@@ -79,7 +80,9 @@ internal class MagisPortalHttp(
                 preferredHost = host
                 val rc = j.optString("returnCode").takeIf { it.isNotEmpty() }
                 if (rc != null && rc != "0") {
-                    return MagisResult.PortalError(rc, j.optString("errorMessage").ifBlank { null })
+                    val message = j.optString("errorMessage").ifBlank { null }
+                    magisLog("portal: $path rejected code=$rc msg=$message")
+                    return MagisResult.PortalError(rc, message)
                 }
                 val data = j.optString("data")
                 return if (data.isNotEmpty()) {
@@ -89,6 +92,7 @@ internal class MagisPortalHttp(
                 }
             } catch (e: Throwable) {
                 // Network down, TLS, or a body that isn't JSON: this host is no good, next one.
+                magisLog("portal: host $host failed ${e::class.simpleName}: ${e.message}")
                 lastError = e
             }
         }

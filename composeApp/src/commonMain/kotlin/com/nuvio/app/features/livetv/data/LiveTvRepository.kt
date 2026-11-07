@@ -470,6 +470,13 @@ internal object LiveTvRepository {
                 prefs.updatePlaylists { list -> list.map { if (it.id == pl.id) it.copy(channelCount = count) else it } }
             }
         }
+        // The native Magis source is appended here and nowhere else: its channels are not a
+        // playlist, so they are never persisted, edited or re-ordered, and a build without the
+        // MAGIS_* values contributes an empty list (MagisBootstrap.stack() is null).
+        runCatching { com.nuvio.app.features.livetv.native.magis.MagisBootstrap.stack()?.loadChannels() }
+            .getOrNull()
+            .orEmpty()
+            .forEach { channel -> if (usedKeys.add(channel.key)) out.add(channel) }
         _channels.value = out
     }
 

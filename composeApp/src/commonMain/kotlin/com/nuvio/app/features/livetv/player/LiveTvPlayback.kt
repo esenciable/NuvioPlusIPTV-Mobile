@@ -141,10 +141,19 @@ internal object LiveTvPlayback {
     }
 
     /** Puts the launch in the store and returns its id, for a PlayerRoute. */
-    fun prepare(channel: LiveChannel, profileId: Int, nowTitle: String? = null): Long {
+    suspend fun prepare(channel: LiveChannel, profileId: Int, nowTitle: String? = null): Long {
         // Adult channels never go in Recently watched.
         LiveTvPreferences.recordWatched(channel.key, addToRecent = !com.nuvio.app.features.livetv.parental.ParentalControls.isAdultChannel(channel))
-        return PlayerLaunchStore.put(launchFor(channel, profileId, nowTitle))
+        // A native Magis channel is stored with a marker instead of a URL: the portal rotates the
+        // host and signs the headers per play, so the real URL is minted HERE, seconds before the
+        // player opens. A resolve that fails hands over the marker, which the player reports as an
+        // error instead of playing a stale signature.
+        val toPlay = if (com.nuvio.app.features.livetv.native.magis.MagisSource.isMagis(channel)) {
+            com.nuvio.app.features.livetv.native.magis.MagisBootstrap.stack()?.resolve(channel) ?: channel
+        } else {
+            channel
+        }
+        return PlayerLaunchStore.put(launchFor(toPlay, profileId, nowTitle))
     }
 
     /**
