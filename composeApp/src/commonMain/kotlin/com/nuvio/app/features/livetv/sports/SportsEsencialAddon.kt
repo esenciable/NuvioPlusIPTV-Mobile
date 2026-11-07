@@ -71,13 +71,23 @@ internal object SportsEsencialAddon {
     suspend fun streams(eventId: String): List<Stream> {
         if (eventId.isBlank()) return emptyList()
         val raw = runCatching { httpGetText("$BASE_URL/stream/tv/$eventId.json") }.getOrNull() ?: return emptyList()
+        return parseStreams(raw)
+    }
+
+    /** The response, parsed. Kept separate from the fetch so the shape can be tested. */
+    internal fun parseStreams(raw: String): List<Stream> {
         val doc = runCatching { Json.parseToJsonElement(raw).jsonObject }.getOrNull() ?: return emptyList()
         val list = doc["streams"] as? JsonArray ?: return emptyList()
         return list.mapNotNull { item ->
             val obj = item as? JsonObject ?: return@mapNotNull null
             val url = obj.str("url") ?: return@mapNotNull null
             if (url.isBlank()) return@mapNotNull null
-            val label = obj.str("name") ?: obj.str("title") ?: obj.str("source") ?: SOURCE_NAME
+            // The addon labels EVERY entry with the same `name` ("Esencial Sport") and puts the
+            // provider it resolved in `resolution` (Fan LAT, TyR, Sport PT…), with the same text as
+            // the tail of `title`. Using `name` collapsed three different links into one row.
+            val provider = obj.str("resolution")
+                ?: obj.str("title")?.substringAfter(" · ", "")?.takeIf { it.isNotBlank() }
+            val label = if (provider.isNullOrBlank()) SOURCE_NAME else "$SOURCE_NAME · $provider"
             Stream(label = label, url = url)
         }
     }
@@ -104,10 +114,15 @@ internal object SportsEsencialAddon {
     /** The links of [game] as channels the Sports page can list. */
     suspend fun matches(game: SportsEvent): List<ChannelMatch> {
         val event = match(game, events()) ?: return emptyList()
-        return streams(event.id).mapIndexed { index, stream ->
+        return rowsFor(event.id, streams(event.id))
+    }
+
+    /** One row per link, with the provider it resolved on, so three links are three rows. */
+    internal fun rowsFor(eventId: String, streams: List<Stream>): List<ChannelMatch> =
+        streams.mapIndexed { index, stream ->
             ChannelMatch(
                 channel = LiveChannel(
-                    key = "$SOURCE_ID:${event.id}:$index",
+                    key = "$SOURCE_ID:$eventId:$index",
                     sourceId = SOURCE_ID,
                     sourceName = SOURCE_NAME,
                     name = stream.label,
@@ -129,7 +144,6 @@ internal object SportsEsencialAddon {
                 catchup = false,
             )
         }
-    }
 
     private fun parseEvents(raw: String): List<Event> {
         val doc = runCatching { Json.parseToJsonElement(raw).jsonObject }.getOrNull() ?: return emptyList()
