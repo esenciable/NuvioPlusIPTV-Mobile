@@ -1,6 +1,7 @@
 package com.nuvio.app.features.livetv.native.magis
 
 import io.ktor.client.HttpClient
+import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
@@ -141,6 +142,11 @@ internal class MagisPortalHttp(
 
 /** One client for the whole process: Magis calls are frequent and a per-call engine is waste. */
 private val magisHttpClient: HttpClient by lazy { com.nuvio.app.core.network.createApiHttpClient() }
+
+/** One GET through the same client the portal uses, for the TMDB title lookup of the VOD flow. */
+internal suspend fun magisHttpGet(url: String): String? = runCatching {
+    magisHttpClient.get(url).bodyAsText()
+}.onFailure { magisLog("http get failed ${it::class.simpleName}: ${it.message}") }.getOrNull()
 
 /** The Ktor transport: one POST, JSON in, text out. Throws on any failure so the caller fails over. */
 private suspend fun ktorSend(url: String, headers: Map<String, String>, body: String): String {

@@ -43,7 +43,38 @@ internal object ServerStreams {
 
     fun isServerSourceId(addonId: String?): Boolean = addonId?.startsWith(GROUP_PREFIX) == true
 
+    /**
+     * Every native source that can serve this request: the user's server connections first, then
+     * the built-in Magis VOD source. Both ride the same group mechanism, so the stream screen does
+     * not distinguish them.
+     */
     fun sources(
+        type: String,
+        videoId: String,
+        season: Int?,
+        episode: Int?,
+        forceRefresh: Boolean = false,
+    ): List<ServerStreamSource> =
+        connectionSources(type, videoId, season, episode, forceRefresh) + magisSources(type, videoId, season, episode)
+
+    private fun magisSources(
+        type: String,
+        videoId: String,
+        season: Int?,
+        episode: Int?,
+    ): List<ServerStreamSource> {
+        if (!MagisServerSource.isConfigured) return emptyList()
+        return listOf(
+            ServerStreamSource(
+                addonId = MagisServerSource.GROUP_ID,
+                addonName = MagisServerSource.GROUP_NAME,
+                preferred = false,
+                loader = { MagisServerSource.streams(type, videoId, season, episode) },
+            ),
+        )
+    }
+
+    private fun connectionSources(
         type: String,
         videoId: String,
         season: Int?,

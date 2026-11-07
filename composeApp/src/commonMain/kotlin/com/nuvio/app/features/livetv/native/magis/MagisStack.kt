@@ -24,6 +24,7 @@ import kotlinx.coroutines.sync.withPermit
 internal class MagisStack(
     private val session: MagisSession,
     private val live: MagisLiveClient,
+    private val vod: MagisVodClient,
 ) {
 
     private var ready = false
@@ -96,6 +97,35 @@ internal class MagisStack(
         return loaded
     }
 
+    /**
+     * Magis VOD for one title: the direct CDN URL plus the headers it demands. Null when the
+     * portal has nothing for this id or the session is dead — the stream screen then shows the
+     * other sources instead of an error.
+     */
+    suspend fun resolveVod(type: String, videoId: String, season: Int?, episode: Int?): MagisVodStream? {
+        if (!ensureReady()) return null
+        val result = runCatching {
+            vod.resolveDetailed(
+                id = videoId,
+                mediaType = type,
+                season = season ?: 0,
+                episode = episode ?: 0,
+            )
+        }.getOrNull()
+        return when (result) {
+            is MagisResult.Ok -> result.data
+            is MagisResult.PortalError -> {
+                magisLog("vod: portal ${result.code}${result.msg?.let { ": $it" } ?: ""} [id=$videoId]")
+                null
+            }
+            is MagisResult.RedError -> {
+                magisLog("vod: red ${result.cause.message} [id=$videoId]")
+                null
+            }
+            null -> null
+        }
+    }
+
     private suspend fun ensureReady(): Boolean {
         if (ready) return true
         val result = runCatching { session.ensureAnonymous() }
@@ -151,7 +181,18 @@ internal object MagisBootstrap {
             snProvider = { sessionStore.read()?.sn.orEmpty() },
         )
         val session = MagisSession(portal, sessionStore, MagisDevice(port))
-        return MagisStack(session, MagisLiveClient(portal, session, configProvider = { provider.current }))
+        return MagisStack(
+            session = session,
+            live = MagisLiveClient(portal, session, configProvider = { provider.current }),
+            // The portal searches its catalogue BY NAME, so the app's own id is turned into the
+            // Spanish title pair first (see MobileMagisTitleLookup).
+            vod = MagisVodClient(
+                portal = portal,
+                session = session,
+                configProvider = { provider.current },
+                titleLookup = MobileMagisTitleLookup(),
+            ),
+        )
     }
 
     /** The build-time values as a runtime config, or null when the build carries none. */
