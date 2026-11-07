@@ -54,7 +54,15 @@ internal object SportsAddonSource {
     suspend fun find(ev: SportsEvent): Found = coroutineScope {
         val installed = AddonRepository.uiState.value.addons.filter { it.isActive }.distinctBy { it.manifestUrl }
         val parts = installed.map { a -> async { runCatching { forAddon(a, ev) }.getOrDefault(NO_RESULT) } }.map { it.await() }
-        Found(parts.flatMap { it.live }, parts.flatMap { it.vod })
+        // Our own addon is read through its own feed, not through a published catalog: the catalog
+        // only put rows on Home and results in search, and it is gone on purpose. /events.json and
+        // /stream/tv/<id>.json are the contract (the TV app already reads it that way).
+        val ours = if (ev.state == GameState.POST) {
+            null
+        } else {
+            async { runCatching { SportsEsencialAddon.matches(ev) }.getOrDefault(emptyList()) }
+        }
+        Found(parts.flatMap { it.live } + (ours?.await() ?: emptyList()), parts.flatMap { it.vod })
     }
 
     private suspend fun forAddon(a: ManagedAddon, ev: SportsEvent): Found {
