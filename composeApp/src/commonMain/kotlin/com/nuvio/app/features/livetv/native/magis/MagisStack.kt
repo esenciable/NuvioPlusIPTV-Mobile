@@ -1,6 +1,12 @@
 package com.nuvio.app.features.livetv.native.magis
 
 import com.nuvio.app.features.livetv.model.LiveChannel
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 
 /**
  * The Magis portal stack for this app: config -> crypto -> portal -> session -> live client, built
@@ -31,20 +37,32 @@ internal class MagisStack(
         magisLog("loadChannels: ${categories.size} categories")
         if (categories.isEmpty()) return emptyList()
 
-        val out = LinkedHashMap<String, LiveChannel>()
-        for (category in categories) {
-            var page = 1
-            while (page <= MAX_PAGES_PER_CATEGORY) {
-                val fetched = runCatching { live.channels(category.id, page) }
-                    .onFailure { magisLog("category ${category.id} page $page threw ${it.message}") }
-                    .getOrNull().orEmpty()
-                for (channel in fetched) {
-                    if (channel.code.isBlank()) continue
-                    out.putIfAbsent(channel.code, MagisSource.channelFrom(channel, category.id, category.name))
+        // Categories are independent reads, so they run concurrently — but BOUNDED, and the portal's
+        // own 150 ms pace is still the real limiter: unbounded fan-out would multiply the traffic
+        // that got the TV client rate-limited.
+        val concurrency = Semaphore(4)
+        val batches: List<List<MagisLiveChannel>> = coroutineScope {
+            categories.map { category ->
+                async {
+                    concurrency.withPermit {
+                        try {
+                            loadCategory(category)
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Throwable) {
+                            magisLog("category ${category.id} failed ${e::class.simpleName}: ${e.message}")
+                            emptyList()
+                        }
+                    }
                 }
-                // A short page means the category is exhausted.
-                if (fetched.size < MagisLiveClient.PAGE_SIZE) break
-                page++
+            }.awaitAll()
+        }
+
+        val out = LinkedHashMap<String, LiveChannel>()
+        categories.forEachIndexed { index, category ->
+            for (channel in batches[index]) {
+                if (channel.code.isBlank()) continue
+                out.putIfAbsent(channel.code, MagisSource.channelFrom(channel, category.id, category.name))
             }
         }
         // Keys are `magis:<code>`; the map is keyed by code until here so a channel appearing in
@@ -65,6 +83,17 @@ internal class MagisStack(
         val cdn = result.data.cdns.firstOrNull() ?: return null
         val aimed = result.data.copy(host = cdn.host, authBase = cdn.authBase)
         return channel.copy(url = live.playlistUrl(aimed), headers = live.signedHeaders(aimed))
+    }
+
+    /** One category, every page: full pages keep coming until one arrives short. */
+    private suspend fun loadCategory(category: MagisLiveCategory): List<MagisLiveChannel> {
+        val loaded = mutableListOf<MagisLiveChannel>()
+        for (page in 1..MAX_PAGES_PER_CATEGORY) {
+            val fetched = live.channels(category.id, page)
+            loaded += fetched
+            if (fetched.size < MagisLiveClient.PAGE_SIZE) break
+        }
+        return loaded
     }
 
     private suspend fun ensureReady(): Boolean {

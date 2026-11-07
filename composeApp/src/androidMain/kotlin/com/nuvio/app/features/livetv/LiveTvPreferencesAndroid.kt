@@ -19,6 +19,10 @@ internal object LiveTvPreferencesAndroid {
     private const val preferencesName = "livetv_prefs"
     private const val devicePreferencesName = "livetv_device_prefs"
 
+    /** Magis keeps its own file: the minted device must survive a launch, or every start mints a
+     *  new one and the portal sees device churn. */
+    private const val magisPreferencesName = "magis_prefs"
+
     private var initialized = false
 
     /** Sets Live TV up once (the activity, a recording alarm or the recording service may each be first). */
@@ -37,6 +41,13 @@ internal object LiveTvPreferencesAndroid {
             save = { data -> write(preferences, data) },
             loadDevice = { read(devicePreferences) },
             saveDevice = { data -> write(devicePreferences, data) },
+        )
+        val magisPreferences = context.getSharedPreferences(magisPreferencesName, Context.MODE_PRIVATE)
+        com.nuvio.app.features.livetv.native.magis.MagisBootstrap.stores.installPersistence(
+            loadSession = { magisPreferences.getString("session", null) },
+            saveSession = { json -> magisPreferences.edit().putString("session", json).apply() },
+            loadConfig = { magisPreferences.getString("config", null) },
+            saveConfig = { json -> magisPreferences.edit().putString("config", json).apply() },
         )
     }
 
