@@ -477,6 +477,16 @@ internal object LiveTvRepository {
             .getOrNull()
             .orEmpty()
             .forEach { channel -> if (usedKeys.add(channel.key)) out.add(channel) }
+        // PremiumTV: a static provider list, no protocol and no setup. It is appended here for the
+        // same reason Magis is: it is a source of its own, never a playlist the user can edit.
+        runCatching { com.nuvio.app.features.livetv.native.premiumtv.premiumTvFeed.load() }
+            .getOrNull()
+            .orEmpty()
+            .forEachIndexed { index, entry ->
+                val channel = com.nuvio.app.features.livetv.native.premiumtv.PremiumTvSource
+                    .channelFrom(entry, index)
+                if (usedKeys.add(channel.key)) out.add(channel)
+            }
         _channels.value = out
     }
 

@@ -42,6 +42,14 @@ internal object MagisServerSource {
         if (!isVodId(videoId)) return emptyList()
         val stack = MagisBootstrap.stack() ?: return emptyList()
         val resolved = stack.resolveVod(type, videoId, season, episode) ?: return emptyList()
+        // Shape only: the URL carries a signed token and the headers carry credentials, so neither
+        // value is logged — but knowing the extension and the header NAMES is what tells a stalled
+        // player apart from a rejected request.
+        com.nuvio.app.features.livetv.native.magis.magisLog(
+            "vod: resolved host=${resolved.url.substringAfter("://").substringBefore('/')} " +
+                "path=${resolved.url.substringBefore('?').takeLast(24)} " +
+                "headers=${resolved.headers.keys.sorted()}",
+        )
         return listOf(
             StreamItem(
                 name = GROUP_NAME,
