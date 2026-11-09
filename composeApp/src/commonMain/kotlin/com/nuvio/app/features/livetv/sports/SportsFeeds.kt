@@ -15,21 +15,30 @@ internal class SportsFeeds {
 
     private suspend fun get(url: String): String = SportsPlatform.get(url)
 
+    /**
+     * Leagues ESPN doesn't carry (see [BasketballFeeds]): their own source, rewritten into the shape
+     * ESPN's scoreboard parser already understands.
+     */
+    private val basketballFeeds = BasketballFeeds { url -> get(url) }
+
     // ------------------------------------------------------------------ ESPN
 
     /** Raw scoreboard for [league] over the days [fromDay]..[toDay] ("yyyyMMdd", US Eastern days). */
     suspend fun scoreboardRaw(league: League, fromDay: String, toDay: String): String =
-        if (OtherFeeds.handles(league.espnPath)) OtherFeeds.scoreboard(league.espnPath!!, fromDay, toDay) { get(it) }
+        if (league.provider != SportProvider.ESPN) basketballFeeds.scoreboard(league)
+        else if (OtherFeeds.handles(league.espnPath)) OtherFeeds.scoreboard(league.espnPath!!, fromDay, toDay) { get(it) }
         else get("$ESPN${league.espnPath}/scoreboard?dates=$fromDay-$toDay&limit=1000${league.espnQuery}")
 
     /** One day only (for leagues whose feed won't take a range of days). */
     suspend fun scoreboardDayRaw(league: League, day: String): String =
-        if (OtherFeeds.handles(league.espnPath)) OtherFeeds.scoreboard(league.espnPath!!, day, day) { get(it) }
+        if (league.provider != SportProvider.ESPN) basketballFeeds.scoreboard(league)
+        else if (OtherFeeds.handles(league.espnPath)) OtherFeeds.scoreboard(league.espnPath!!, day, day) { get(it) }
         else get("$ESPN${league.espnPath}/scoreboard?dates=$day&limit=1000${league.espnQuery}")
 
     /** The feed's own pick of days (no date asked for): the last resort. */
     suspend fun scoreboardDefaultRaw(league: League): String =
-        if (OtherFeeds.handles(league.espnPath)) OtherFeeds.scoreboardNow(league.espnPath!!) { get(it) }
+        if (league.provider != SportProvider.ESPN) basketballFeeds.scoreboard(league)
+        else if (OtherFeeds.handles(league.espnPath)) OtherFeeds.scoreboardNow(league.espnPath!!) { get(it) }
         else get("$ESPN${league.espnPath}/scoreboard?limit=1000${league.espnQuery}")
 
     suspend fun teamsRaw(league: League): String =

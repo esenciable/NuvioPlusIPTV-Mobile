@@ -159,7 +159,7 @@ internal object SportsRepository {
             .groupBy { SportsCatalog.league(it.leagueId)?.sport }
         fun coveredByEspn(ev: SportsEvent): Boolean {
             val league = SportsCatalog.league(ev.leagueId) ?: return false
-            if (league.espnPath != null) return false
+            if (league.hasFeed) return false
             val same = espnBySport[league.sport] ?: return false
             val t = SportsCatalog.norm(ev.title + " " + (ev.subtitle ?: ""))
             return same.any { r ->
@@ -420,6 +420,9 @@ internal object SportsRepository {
     /** Every built-in league ESPN has data for, region and follows aside: the fetch scope. */
     fun allEspnLeagues(): List<League> = SportsCatalog.leagues.filter { it.espnPath != null }
 
+    /** Every built-in league with a feed to ask for its games (ESPN's or the competition's own). */
+    fun feedLeagues(): List<League> = SportsCatalog.leagues.filter { it.hasFeed }
+
     /** Leagues you follow something in: your teams' leagues and the competitions they play in, whole leagues, top-bar leagues. */
     fun followedLeagueIds(f: SportsFollows = follows.value): Set<String> {
         val out = LinkedHashSet<String>()
@@ -478,7 +481,7 @@ internal object SportsRepository {
         // whose game is on screen, or one on the hub's default view while you're looking at it.
         // Every other league is kept warm through the shared cache in nuvio-data instead.
         fun fastLeague(l: League) = isMine(l, f) || l.id in playingLeagues || SportsCatalog.shown(l, s)
-        val due = allEspnLeagues().filter { l ->
+        val due = feedLeagues().filter { l ->
             val d = data[l.id]
             val age = now - (d?.fetchedAt ?: 0L)
             val live = d?.events?.any { it.state == GameState.LIVE || (it.state == GameState.PRE && it.startMs in (now - 15 * MINUTE)..(now + 10 * MINUTE)) } == true
@@ -826,7 +829,7 @@ internal object SportsRepository {
         val now = LiveTvClock.nowMs()
         val m = HashMap<String, LeagueData>()
         for (l in SportsCatalog.leagues) {
-            if (l.espnPath == null) continue
+            if (!l.hasFeed) continue
             val text = LiveTvFiles.readSmall(DIR, "sb_${safe(l.id)}.json") ?: continue
             runCatching {
                 val nl = text.indexOf('\n')
