@@ -753,6 +753,9 @@ internal object SportsRepository {
 
     /** A league's games for the three days around today: a day at a time; failing that, whatever day the feed picks. */
     private suspend fun fetchScoreboard(l: League, days: List<String>): List<String> {
+        // A league with its own source answers with the whole round in one request; ESPN doesn't, so
+        // it has to be asked a day at a time. Non-ESPN leagues are a keyed API: ask them once.
+        if (l.provider != SportProvider.ESPN) return listOf(feeds.scoreboardDefaultRaw(l))
         var firstError: Throwable? = null
         val singles = days.mapNotNull { d ->
             runCatching { feeds.scoreboardDayRaw(l, d) }.onFailure { if (firstError == null) firstError = it }.getOrNull()

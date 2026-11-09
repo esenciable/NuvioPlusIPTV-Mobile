@@ -1,5 +1,6 @@
 package com.nuvio.app.features.livetv.sports
 
+import com.nuvio.app.features.addons.httpGetTextWithHeaders
 import com.nuvio.app.features.livetv.model.LiveTvClock
 import kotlin.concurrent.Volatile
 import kotlin.math.roundToLong
@@ -15,11 +16,19 @@ internal class SportsFeeds {
 
     private suspend fun get(url: String): String = SportsPlatform.get(url)
 
+    /** The same app-wide fetch with request headers, for a source that asks for a key of its own. */
+    private suspend fun get(url: String, headers: Map<String, String>): String =
+        httpGetTextWithHeaders(url, headers)
+
     /**
      * Leagues ESPN doesn't carry (see [BasketballFeeds]): their own source, rewritten into the shape
-     * ESPN's scoreboard parser already understands.
+     * ESPN's scoreboard parser already understands. ACB's API wants a key, so it gets the
+     * header-aware fetch; everything else keeps the plain one.
      */
-    private val basketballFeeds = BasketballFeeds { url -> get(url) }
+    private val basketballFeeds = BasketballFeeds(
+        get = { url -> get(url) },
+        getWithHeaders = { url, headers -> get(url, headers) },
+    )
 
     // ------------------------------------------------------------------ ESPN
 
